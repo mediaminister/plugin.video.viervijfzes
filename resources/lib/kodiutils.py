@@ -200,6 +200,15 @@ def play(stream, title=None, art_dict=None, info_dict=None, prop_dict=None):
     if prop_dict:
         play_item.setProperties(prop_dict)
 
+    if stream.endswith('.m3u8'):
+         if kodi_version_major() >= 19:
+                play_item.setProperty('inputstream', 'inputstream.adaptive')
+            else:
+                play_item.setProperty('inputstreamaddon', 'inputstream.adaptive')
+        play_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+        play_item.setContentLookup(False)
+        play_item.setMimeType('application/vnd.apple.mpegurl')
+
     xbmcplugin.setResolvedUrl(routing.handle, True, listitem=play_item)
 
 
