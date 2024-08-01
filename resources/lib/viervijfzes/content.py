@@ -3,7 +3,6 @@
 
 from __future__ import absolute_import, division, unicode_literals
 
-import hashlib
 import json
 import logging
 import os
@@ -48,16 +47,19 @@ class GeoblockedException(Exception):
 class Program:
     """ Defines a Program. """
 
-    def __init__(self, uuid=None, path=None, channel=None, title=None, description=None, aired=None, poster=None, thumb=None, fanart=None, seasons=None,
+    def __init__(self, uuid=None, path=None, channel=None, category_id=None, category_name=None, title=None, description=None, aired=None, expiry=None, poster=None, thumb=None, fanart=None, seasons=None,
                  episodes=None,
                  clips=None, my_list=False):
         """
         :type uuid: str
         :type path: str
         :type channel: str
+        :type category_id: str
+        :type category_name: str
         :type title: str
         :type description: str
         :type aired: datetime
+        :type expiry: datetime
         :type poster: str
         :type thumb: str
         :type fanart: str
@@ -69,9 +71,12 @@ class Program:
         self.uuid = uuid
         self.path = path
         self.channel = channel
+        self.category_id = category_id
+        self.category_name = category_name
         self.title = title
         self.description = description
         self.aired = aired
+        self.expiry = expiry
         self.poster = poster
         self.thumb = thumb
         self.fanart = fanart
@@ -112,7 +117,7 @@ class Episode:
     """ Defines an Episode. """
 
     def __init__(self, uuid=None, nodeid=None, path=None, channel=None, program_title=None, title=None, description=None, thumb=None, duration=None,
-                 season=None, season_uuid=None, number=None, rating=None, aired=None, expiry=None, stream=None, islongform=False):
+                 season=None, season_uuid=None, number=None, rating=None, aired=None, expiry=None, stream=None, content_type=None):
         """
         :type uuid: str
         :type nodeid: str
@@ -130,7 +135,7 @@ class Episode:
         :type aired: datetime
         :type expiry: datetime
         :type stream: string
-        :type islongform: bool
+        :type content_type: string
         """
         self.uuid = uuid
         self.nodeid = nodeid
@@ -148,7 +153,7 @@ class Episode:
         self.aired = aired
         self.expiry = expiry
         self.stream = stream
-        self.islongform = islongform
+        self.content_type = content_type
 
     def __repr__(self):
         return "%r" % self.__dict__
@@ -175,6 +180,49 @@ class Category:
         return "%r" % self.__dict__
 
 
+class Swimlane:
+    """ Defines a Swimlane. """
+
+    def __init__(self, index=None, title=None, lane_type=None):
+        """
+        :type index: int
+        :type title: str
+        :type lane_type: str
+        """
+        self.index = index
+        self.title = title
+        self.lane_type = lane_type
+
+    def __repr__(self):
+        return "%r" % self.__dict__
+
+
+class Channel:
+    """ Defines a Channel. """
+
+    def __init__(self, uuid=None, index=None, title=None, description=None, brand=None, logo=None, fanart=None):
+        """
+        :type uuid: str
+        :type index: int
+        :type title: str
+        :type description: str
+        :type brand: str
+        :type logo: str
+        :type fanart: str
+        """
+        self.uuid = uuid
+        self.index = index
+        self.title = title
+        self.description = description
+        self.brand = brand
+        self.logo = logo
+        self.fanart = fanart
+
+
+    def __repr__(self):
+        return "%r" % self.__dict__
+
+
 class ContentApi:
     """ GoPlay Content API"""
     SITE_URL = 'https://www.goplay.be'
@@ -186,7 +234,46 @@ class ContentApi:
         self._auth = auth
         self._cache_path = cache_path
 
-    def get_programs(self, channel=None, cache=CACHE_AUTO):
+    @staticmethod
+    def channel2brand(channel):
+        """ Maps a channel name to a brand id
+        :type channel: str
+        :rtype str
+        """
+        brands = {
+            'Play 4': 'vier',
+            'Play 5': 'vijf',
+            'Play 6': 'zes',
+            'Play 7': 'zeven',
+            'GoPlay': 'goplay',
+            'Play Crime': 'play crime',         
+        }
+        return brands.get(channel)
+
+    def get_programs(self, channel=None, category=None):
+        """ Get all programs optionally filtered by channel or category.
+        :type channel: str
+        :type category: int
+        :rtype list[Program]
+        """
+        programs = self.get_program_tree()
+
+        # Return all programs
+        if not channel and not category:
+            return programs
+
+        # filter by category_id, channel
+        key = ''
+        value = None
+        if channel:
+            key = 'channel'
+            value = self.channel2brand(channel)
+        elif category:
+            key = 'category_id'
+            value = category
+        return [program for program in programs if getattr(program, key) == value]
+
+    def get_programs_old(self, channel=None, cache=CACHE_AUTO):
         """ Get a list of all programs of the specified channel.
         :type channel: str
         :type cache: str
@@ -279,7 +366,7 @@ class ContentApi:
         def update():
             """ Fetch the program metadata """
             # Fetch webpage
-            result = self._get_url(self.SITE_URL + '/api/program/%s' % uuid)
+            result = self._get_url(self.API_GOPLAY + '/tv/v2/programs/%s' % uuid)
             data = json.loads(result)
             return data
 
@@ -291,6 +378,52 @@ class ContentApi:
         program = self._parse_program_data(data)
 
         return program
+
+    def get_live_channels(self, cache=CACHE_AUTO):
+        """  Get a list of live channels.
+        :type cache: str
+        :rtype list[Channel]
+        """
+        def update():
+            """ Fetch the program metadata """
+            # Fetch webpage
+            result = self._get_url(self.API_GOPLAY + '/tv/v1/liveStreams', authentication='Bearer %s' % self._auth.get_token())
+            data = json.loads(result)
+            return data
+
+        # Fetch listing from cache or update if needed
+        data = self._handle_cache(key=['channels'], cache_mode=cache, update=update)
+        if not data:
+            return None
+
+        channels = self._parse_channels_data(data)
+
+        return channels
+
+    def get_episodes(self, playlist_uuid, offset=0, limit=100, cache=CACHE_AUTO):
+        """  Get a list of all episodes of the specified playlist.
+        :type playlist_uuid: str
+        :type cache: str
+        :rtype list[Episode]
+        """
+        if not playlist_uuid:
+            return None
+
+        def update():
+            """ Fetch the program metadata """
+            # Fetch webpage
+            result = self._get_url(self.API_GOPLAY + '/tv/v1/playlists/%s?offset=%s&limit=%s' % (playlist_uuid, offset, limit), authentication='Bearer %s' % self._auth.get_token())
+            data = json.loads(result)
+            return data
+
+        # Fetch listing from cache or update if needed
+        data = self._handle_cache(key=['playlist', playlist_uuid, offset, limit], cache_mode=cache, update=update)
+        if not data:
+            return None
+
+        episodes = self._parse_playlist_data(data)
+
+        return episodes
 
     def get_episode(self, path, cache=CACHE_AUTO):
         """ Get a Episode object from the specified page.
@@ -353,14 +486,19 @@ class ContentApi:
 
         return None
 
-    def get_stream_by_uuid(self, uuid, islongform):
+    def get_stream_by_uuid(self, uuid, content_type):
         """ Return a ResolvedStream for this video.
-        :type uuid: str
-        :type islongform: bool
+        :type uuid: string
+        :type content_type: string
         :rtype: ResolvedStream
         """
-        mode = 'long-form' if islongform else 'short-form'
-        response = self._get_url(self.API_GOPLAY + '/web/v1/videos/%s/%s' % (mode, uuid), authentication='Bearer %s' % self._auth.get_token())
+        if content_type in ('video-long_form', 'long_form'):
+            mode = 'videos/long-form'
+        elif content_type == 'video-short_form':
+            mode = 'videos/short-form'
+        elif content_type == 'live_channel':
+            mode = 'liveStreams'
+        response = self._get_url(self.API_GOPLAY + '/web/v1/%s/%s' % (mode, uuid), authentication='Bearer %s' % self._auth.get_token())
         data = json.loads(response)
 
         if not data:
@@ -413,21 +551,20 @@ class ContentApi:
 
         raise UnavailableException
 
-    def get_program_tree(self, cache=CACHE_AUTO):
+    def get_program_tree(self):
         """ Get a content tree with information about all the programs.
-        :type cache: str
-        :rtype dict
+        :rtype list[Program]
         """
-
-        def update():
-            """ Fetch the content tree """
-            response = self._get_url(self.SITE_URL + '/api/content_tree')
-            return json.loads(response)
-
-        # Fetch listing from cache or update if needed
-        data = self._handle_cache(key=['content_tree'], cache_mode=cache, update=update, ttl=5 * 60)  # 5 minutes
-
-        return data
+        page = 'programs'
+        swimlanes = self.get_page(page)
+        cards = []
+        # get lanes
+        for lane in swimlanes:
+            index = lane.index
+            # get lane by index
+            _, data = self.get_swimlane(page, index)
+            cards.extend(data)
+        return cards
 
     def get_popular_programs(self, brand=None):
         """ Get a list of popular programs.
@@ -450,80 +587,110 @@ class ContentApi:
         :rtype list[Category]
         """
         content_tree = self.get_program_tree()
-
         categories = []
-        for category_id, category_name in content_tree.get('categories').items():
-            categories.append(Category(uuid=category_id,
-                                       title=category_name))
-
+        cat_set = set()
+        for item in content_tree:
+            cat_obj = Category(uuid=item.category_id, title=item.category_name)
+            if item.category_id not in cat_set:
+                categories.append(cat_obj)
+                cat_set.add(item.category_id)
         return categories
 
-    def get_category_content(self, category_id):
-        """ Return a category.
-        :type category_id: int
-        :rtype list[Program]
+    def get_page(self, page, cache=CACHE_AUTO):
+        """ Get a list of all swimlanes on a page.
+        :rtype list[Swimlane]
         """
-        content_tree = self.get_program_tree()
 
-        # Find out all the program_id's of the requested category
-        program_ids = [key for key, value in content_tree.get('programs').items() if value.get('category') == category_id]
+        def update():
+            """ Fetch the pages metadata """
+            data = self._get_url(self.API_GOPLAY + '/tv/v2/pages/%s' % page, authentication='Bearer %s' % self._auth.get_token())
+            result = json.loads(data)
+            return result
 
-        # Filter out the list of all programs to only keep the one of the requested category
-        return [program for program in self.get_programs() if program.uuid in program_ids]
+        # Fetch listing from cache or update if needed
+        data = self._handle_cache(key=['pages', page], cache_mode=cache, update=update)
+        if not data:
+            return None
 
-    def get_recommendation_categories(self):
+        swimlanes = []
+        for item in data.get('lanes'):
+            swimlanes.append(
+                Swimlane(index=item.get('index'), title=item.get('title'), lane_type=item.get('laneType'))
+            )
+        return swimlanes
+
+    def get_swimlane(self, page, index, limit=100, offset=0, cache=CACHE_AUTO):
         """ Get a list of all categories.
-        :rtype list[Category]
+        :rtype list[Episode], list[Program]
         """
-        # Load all programs
-        all_programs = self.get_programs()
 
-        # Load webpage
-        raw_html = self._get_url(self.SITE_URL)
+        def update():
+            """ Fetch the swimlane metadata """
+            cards = []
+            got_everything = False
+            offset = 0
+            while not got_everything:
+                data = self._get_url(self.API_GOPLAY + '/tv/v2/pages/%s/lanes/%s?limit=%s&offset=%s' % (page, index, limit, offset), authentication='Bearer %s' % self._auth.get_token())
+                result = json.loads(data)
+                cards.extend(result.get('cards'))
+                total = result.get('total')
+                if offset < (total - limit):
+                    offset += limit
+                else:
+                    got_everything = True
+            return cards
 
-        # Categories regexes
-        regex_articles = re.compile(r'<article[^>]+>(.*?)</article>', re.DOTALL)
-        regex_category = re.compile(r'<h2.*?>(.*?)</h2>(?:.*?<div class="visually-hidden">(.*?)</div>)?', re.DOTALL)
+        # Fetch listing from cache or update if needed
+        data = self._handle_cache(key=['swimlane', page, index, limit, offset], cache_mode=cache, update=update)
+        if not data:
+            return None
 
-        categories = []
-        for result in regex_articles.finditer(raw_html):
-            article_html = result.group(1)
 
-            match_category = regex_category.search(article_html)
-            category_title = None
-            if match_category:
-                category_title = match_category.group(1).strip()
-                if match_category.group(2):
-                    category_title += ' [B]%s[/B]' % match_category.group(2).strip()
+        videos = []
+        programs = []
+        for card in data:
+            if card.get('type') == 'PROGRAM':
+                # Program
+                programs.append(Program(
+                    uuid=card.get('uuid'),
+                    title=card.get('title'),
+                    category_id=str(card.get('categoryId')),
+                    category_name=card.get('category') or 'No category',
+                    poster=card.get('images')[0].get('url'),
+                    channel=card.get('brand'),
+                ))
+            elif card.get('type') == 'VIDEO':
+                # Video
+                videos.append(Episode(
+                    uuid=card.get('uuid'),
+                    title=card.get('subtitle'),
+                    channel=card.get('brand'),
+                    description=html_to_kodi(card.get('description')),
+                    duration=card.get('duration'),
+                    thumb=card.get('images')[0].get('url'),
+                    program_title=card.get('title'),
+                    aired=datetime.fromtimestamp(card.get('dates', {}).get('publishDate', 0.0) or 0.0),
+                    expiry=datetime.fromtimestamp(card.get('dates', {}).get('unpublishDate', 0.0) or 0.0),
+                    content_type='long_form',
+                ))
 
-            if category_title:
-                # Extract programs and lookup in all_programs so we have more metadata
-                programs = []
-                for program in self._extract_programs(article_html):
-                    try:
-                        rich_program = next(rich_program for rich_program in all_programs if rich_program.path == program.path)
-                        programs.append(rich_program)
-                    except StopIteration:
-                        programs.append(program)
+        return videos, programs
 
-                episodes = self._extract_videos(article_html)
-
-                categories.append(
-                    Category(uuid=hashlib.md5(category_title.encode('utf-8')).hexdigest(), title=category_title, programs=programs, episodes=episodes))
-
-        return categories
 
     def get_mylist(self):
         """ Get the content of My List
         :rtype list[Program]
         """
-        data = self._get_url(self.API_GOPLAY + '/my-list', authentication='Bearer %s' % self._auth.get_token())
+        data = self._get_url(
+            self.API_GOPLAY + '/tv/v1/programs/myList',
+            authentication='Bearer %s' % self._auth.get_token()
+        )
         result = json.loads(data)
 
         items = []
         for item in result:
             try:
-                program = self.get_program_by_uuid(item.get('programId'))
+                program = self.get_program_by_uuid(item)
                 if program:
                     program.my_list = True
                     items.append(program)
@@ -534,11 +701,19 @@ class ContentApi:
 
     def mylist_add(self, program_id):
         """ Add a program on My List """
-        self._post_url(self.API_GOPLAY + '/my-list', data={'programId': program_id}, authentication='Bearer %s' % self._auth.get_token())
+        self._put_url(
+            self.API_GOPLAY + '/tv/v1/programs/%s/myList' % program_id,
+            data={'onMyList': True},
+            authentication='Bearer %s' % self._auth.get_token()
+        )
 
     def mylist_del(self, program_id):
         """ Remove a program on My List """
-        self._delete_url(self.API_GOPLAY + '/my-list-item', params={'programId': program_id}, authentication='Bearer %s' % self._auth.get_token())
+        self._put_url(
+            self.API_GOPLAY + '/tv/v1/programs/%s/myList' % program_id,
+            data={'onMyList': False},
+            authentication='Bearer %s' % self._auth.get_token()
+        )
 
     @staticmethod
     def _extract_programs(html):
@@ -654,38 +829,85 @@ class ContentApi:
         """
         # Create Program info
         program = Program(
-            uuid=data.get('id'),
-            path=data.get('link').lstrip('/'),
-            channel=data.get('pageInfo').get('brand'),
+            uuid=data.get('programUuid'),
+            path=data.get('programUuid'),
+            channel=data.get('brand'),
             title=data.get('title'),
             description=html_to_kodi(data.get('description')),
-            aired=datetime.fromtimestamp(data.get('pageInfo', {}).get('publishDate', 0.0)),
-            poster=data.get('images').get('poster'),
-            thumb=data.get('images').get('teaser'),
-            fanart=data.get('images').get('teaser'),
+            aired=datetime.fromtimestamp(data.get('dates', {}).get('publishDate', 0.0) or 0.0),
+            expiry=datetime.fromtimestamp(data.get('dates', {}).get('unpublishDate', 0.0) or 0.0),
+            poster=data.get('images').get('portrait'),
+            thumb=data.get('images').get('portrait'),
+            fanart=data.get('images').get('background'),
         )
 
         # Create Season info
+
         program.seasons = {
             key: Season(
-                uuid=playlist.get('id'),
-                path=playlist.get('link').lstrip('/'),
-                channel=playlist.get('pageInfo').get('brand'),
+                uuid=playlist.get('playlistUuid'),
                 title=playlist.get('title'),
-                description=html_to_kodi(playlist.get('description')),
-                number=playlist.get('episodes')[0].get('seasonNumber'),  # You did not see this
+                number=re.compile(r'\d+$').findall(playlist.get('title'))[-1] if re.compile(r'\d+$').findall(playlist.get('title')) else None,
             )
-            for key, playlist in enumerate(data.get('playlists', [])) if playlist.get('episodes')
+            for key, playlist in enumerate(data.get('playlists', [])) if playlist.get('title')
         }
-
+        '''
         # Create Episodes info
         program.episodes = [
-            ContentApi._parse_episode_data(episode, playlist.get('id'))
+            ContentApi._parse_episode_data(episode, playlist.get('playlistUuid'))
             for playlist in data.get('playlists', [])
             for episode in playlist.get('episodes')
         ]
+        '''
 
         return program
+
+
+    @staticmethod
+    def _parse_playlist_data(data):
+        """ Parse the Playlist JSON.
+        :type data: dict
+        :rtype Playlist
+        """
+        # Create Playlist info
+        playlist = [
+            Episode(
+                uuid=video.get('videoUuid'),
+                title=video.get('title'),
+                aired=datetime.fromtimestamp(video.get('dates', {}).get('publishDate', 0.0) or 0.0),
+                expiry=datetime.fromtimestamp(video.get('dates', {}).get('unpublishDate', 0.0) or 0.0),
+                description=html_to_kodi(video.get('description')),
+                thumb=video.get('image'),
+                duration=video.get('duration'),
+                #number=video.get('title').split()[1],
+                content_type='long_form',
+            )
+            for video in data.get('videos', [])
+        ]
+        return playlist
+
+
+    @staticmethod
+    def _parse_channels_data(data):
+        """ Parse the Channel JSON.
+        :type data: dict
+        :rtype list[Channel]
+        """
+        # Create Channel info
+        channels = [
+            Channel(
+                uuid=channel.get('uuid'),
+                index=channel.get('index'),
+                title=channel.get('title'),
+                description=html_to_kodi(channel.get('description')),
+                brand=channel.get('brand'),
+                logo=channel.get('transparentLogo')[0].get('url'),
+                fanart=channel.get('images')[2].get('url'),
+            )
+            for channel in data
+        ]
+        return channels
+
 
     @staticmethod
     def _parse_episode_data(data, season_uuid=None):
@@ -721,7 +943,7 @@ class ContentApi:
             expiry=datetime.fromtimestamp(int(data.get('unpublishDate'))) if data.get('unpublishDate') else None,
             rating=data.get('parentalRating'),
             stream=data.get('path'),
-            islongform=data.get('isLongForm'),
+            content_type=data.get('type'),
         )
         return episode
 
@@ -804,6 +1026,25 @@ class ContentApi:
 
         return response.text
 
+    def _put_url(self, url, params=None, data=None, authentication=None):
+        """ Makes a PUT request for the specified URL.
+        :type url: str
+        :type authentication: str
+        :rtype str
+        """
+        if authentication:
+            response = self._session.put(url, params=params, json=data, headers={
+                'authorization': authentication,
+            }, proxies=PROXIES)
+        else:
+            response = self._session.put(url, params=params, json=data, proxies=PROXIES)
+
+        if response.status_code not in (200, 201, 204):
+            _LOGGER.error(response.text)
+            raise Exception('Could not fetch data')
+
+        return response.text
+
     def _delete_url(self, url, params=None, authentication=None):
         """ Makes a DELETE request for the specified URL.
         :type url: str
@@ -836,7 +1077,7 @@ class ContentApi:
         if data is None:
             try:
                 # Fetch fresh data
-                _LOGGER.debug('Fetching fresh data for key %s', '.'.join(key))
+                _LOGGER.debug('Fetching fresh data for key %s', '.'.join(str(x) for x in key))
                 data = update()
                 if data:
                     # Store fresh response in cache
@@ -849,7 +1090,7 @@ class ContentApi:
 
     def _get_cache(self, key, allow_expired=False):
         """ Get an item from the cache """
-        filename = ('.'.join(key) + '.json').replace('/', '_')
+        filename = ('.'.join(str(x) for x in key) + '.json').replace('/', '_')
         fullpath = os.path.join(self._cache_path, filename)
 
         if not os.path.exists(fullpath):
@@ -868,7 +1109,7 @@ class ContentApi:
 
     def _set_cache(self, key, data, ttl):
         """ Store an item in the cache """
-        filename = ('.'.join(key) + '.json').replace('/', '_')
+        filename = ('.'.join(str(x) for x in key) + '.json').replace('/', '_')
         fullpath = os.path.join(self._cache_path, filename)
 
         if not os.path.exists(self._cache_path):

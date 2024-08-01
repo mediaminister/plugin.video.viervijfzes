@@ -41,7 +41,7 @@ class Catalog:
         :type channel: str
         """
         try:
-            items = self._api.get_programs(channel)
+            items = self._api.get_programs(channel=channel)
         except Exception as ex:
             kodiutils.notification(message=str(ex))
             raise
@@ -54,55 +54,35 @@ class Catalog:
         # Used for A-Z listing or when movies and episodes are mixed.
         kodiutils.show_listing(listing, 30003, content='tvshows', sort='title')
 
-    def show_program(self, program_id):
+    def show_program(self, program_uuid):
         """ Show a program from the catalog
         :type program_id: str
          """
         try:
-            program = self._api.get_program(program_id, extract_clips=True, cache=CACHE_PREVENT)  # Use CACHE_PREVENT since we want fresh data
+            program = self._api.get_program_by_uuid(program_uuid, cache=CACHE_PREVENT)  # Use CACHE_PREVENT since we want fresh data
         except UnavailableException:
             kodiutils.ok_dialog(message=kodiutils.localize(30717))  # This program is not available in the catalogue.
             kodiutils.end_of_directory()
             return
 
-        if not program.episodes and not program.clips:
+        if not program.seasons:
             kodiutils.ok_dialog(message=kodiutils.localize(30717))  # This program is not available in the catalogue.
             kodiutils.end_of_directory()
             return
 
         # Go directly to the season when we have only one season and no clips
         if not program.clips and len(program.seasons) == 1:
-            self.show_program_season(program_id, list(program.seasons.values())[0].uuid)
+            self.show_season(list(program.seasons.values())[0].uuid)
             return
 
         listing = []
-
-        # Add an '* All seasons' entry when configured in Kodi
-        if program.seasons and kodiutils.get_global_setting('videolibrary.showallitems') is True:
-            listing.append(
-                TitleItem(
-                    title='* %s' % kodiutils.localize(30204),  # * All seasons
-                    path=kodiutils.url_for('show_catalog_program_season', program=program_id, season='-1'),
-                    art_dict={
-                        'fanart': program.fanart,
-                        'poster': program.poster,
-                        'landscape': program.thumb,
-                    },
-                    info_dict={
-                        'tvshowtitle': program.title,
-                        'title': kodiutils.localize(30204),  # All seasons
-                        'plot': program.description,
-                        'set': program.title,
-                    }
-                )
-            )
 
         # Add the seasons
         for season in list(program.seasons.values()):
             listing.append(
                 TitleItem(
-                    title=season.title,  # kodiutils.localize(30205, season=season.number),  # Season {season}
-                    path=kodiutils.url_for('show_catalog_program_season', program=program_id, season=season.uuid),
+                    title=season.title,
+                    path=kodiutils.url_for('show_catalog_program_season', program=program_uuid, season=season.uuid),
                     art_dict={
                         'fanart': program.fanart,
                         'poster': program.poster,
@@ -110,7 +90,7 @@ class Catalog:
                     },
                     info_dict={
                         'tvshowtitle': program.title,
-                        'title': kodiutils.localize(30205, season=season.number) if season.number else season.title,  # Season {season}
+                        'title': season.title,
                         'plot': season.description or program.description,
                         'set': program.title,
                     }
@@ -122,7 +102,7 @@ class Catalog:
             listing.append(
                 TitleItem(
                     title=kodiutils.localize(30059, program=program.title),  # Clips for {program}
-                    path=kodiutils.url_for('show_catalog_program_clips', program=program_id),
+                    path=kodiutils.url_for('show_catalog_program_clips', program=program_uuid),
                     art_dict={
                         'fanart': program.fanart,
                         'poster': program.poster,
@@ -140,24 +120,16 @@ class Catalog:
         # Sort by label. Some programs return seasons unordered.
         kodiutils.show_listing(listing, 30003, content='tvshows')
 
-    def show_program_season(self, program_id, season_uuid):
-        """ Show the episodes of a program from the catalog
-        :type program_id: str
+    def show_season(self, season_uuid):
+        """ Show the episodes of a season from the catalog
         :type season_uuid: str
         """
         try:
-            program = self._api.get_program(program_id)
+            episodes = self._api.get_episodes(season_uuid)
         except UnavailableException:
             kodiutils.ok_dialog(message=kodiutils.localize(30717))  # This program is not available in the catalogue.
             kodiutils.end_of_directory()
             return
-
-        if season_uuid == "-1":
-            # Show all episodes
-            episodes = program.episodes
-        else:
-            # Show the episodes of the season that was selected
-            episodes = [e for e in program.episodes if e.season_uuid == season_uuid]
 
         listing = [Menu.generate_titleitem(episode) for episode in episodes]
 
@@ -197,7 +169,7 @@ class Catalog:
 
     def show_category(self, uuid):
         """ Shows a category """
-        programs = self._api.get_category_content(int(uuid))
+        programs = self._api.get_programs(category=uuid)
 
         listing = [
             Menu.generate_titleitem(program) for program in programs
@@ -207,41 +179,26 @@ class Catalog:
 
     def show_recommendations(self):
         """ Shows the recommendations """
-        # "Meest bekeken" has a specific API endpoint, the other categories are scraped from the website.
-        listing = [
-            TitleItem(title='Meest bekeken',
-                      path=kodiutils.url_for('show_recommendations_category', category='meest-bekeken'),
-                      info_dict={
-                          'title': 'Meest bekeken',
-                      })
-        ]
-
-        recommendations = self._api.get_recommendation_categories()
-        for category in recommendations:
-            listing.append(TitleItem(title=category.title,
-                                     path=kodiutils.url_for('show_recommendations_category', category=category.uuid),
+        listing = []
+        recommendations = self._api.get_page('home')
+        for swimlane in recommendations:
+            listing.append(TitleItem(title=swimlane.title,
+                                     path=kodiutils.url_for('show_recommendations_category', category=swimlane.index),
                                      info_dict={
-                                         'title': category.title,
+                                         'title': swimlane.title,
                                      }))
 
         kodiutils.show_listing(listing, 30005, content='tvshows')
 
-    def show_recommendations_category(self, uuid):
-        """ Shows the a category of the recommendations """
-        if uuid == 'meest-bekeken':
-            programs = self._api.get_popular_programs()
-            episodes = []
-        else:
-            recommendations = self._api.get_recommendation_categories()
-            category = next(category for category in recommendations if category.uuid == uuid)
-            programs = category.programs
-            episodes = category.episodes
+    def show_recommendations_category(self, index):
+        """ Shows a category of the recommendations """
+        videos, programs = self._api.get_swimlane('home', index)
 
         listing = []
-        for episode in episodes:
-            title_item = Menu.generate_titleitem(episode)
-            if episode.program_title:
-                title_item.info_dict['title'] = episode.program_title + ' - ' + title_item.title
+        for video in videos:
+            title_item = Menu.generate_titleitem(video)
+            if video.program_title:
+                title_item.info_dict['title'] = video.program_title + ' - ' + title_item.title
             listing.append(title_item)
 
         for program in programs:

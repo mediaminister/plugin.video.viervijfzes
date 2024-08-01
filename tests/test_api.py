@@ -34,7 +34,7 @@ class TestApi(unittest.TestCase):
             self.assertIsInstance(programs[0], Program)
 
     def test_recommendations(self):
-        categories = self._api.get_recommendation_categories()
+        categories = self._api.get_categories()
         self.assertIsInstance(categories, list)
 
     def test_categories(self):
@@ -42,7 +42,7 @@ class TestApi(unittest.TestCase):
         self.assertIsInstance(categories, list)
         self.assertIsInstance(categories[0], Category)
 
-        programs = self._api.get_category_content(int(categories[0].uuid))
+        programs = self._api.get_programs(int(categories[0].uuid))
         self.assertIsInstance(programs, list)
         self.assertIsInstance(programs[0], Program)
 

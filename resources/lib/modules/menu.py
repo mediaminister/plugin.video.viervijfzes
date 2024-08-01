@@ -148,11 +148,11 @@ class Menu:
             context_menu.append((
                 kodiutils.localize(30102),  # Go to Program
                 'Container.Update(%s)' %
-                kodiutils.url_for('show_catalog_program', program=item.path)
+                kodiutils.url_for('show_catalog_program', uuid=item.uuid)
             ))
 
             return TitleItem(title=title,
-                             path=kodiutils.url_for('show_catalog_program', program=item.path),
+                             path=kodiutils.url_for('show_catalog_program', uuid=item.uuid),
                              context_menu=context_menu,
                              art_dict=art_dict,
                              info_dict=info_dict,
@@ -183,7 +183,7 @@ class Menu:
 
             if item.uuid:
                 # We have an UUID and can play this item directly
-                path = kodiutils.url_for('play_catalog', uuid=item.uuid, islongform=item.islongform)
+                path = kodiutils.url_for('play_catalog', uuid=item.uuid, content_type=item.content_type)
             else:
                 # We don't have an UUID, and first need to fetch the video information from the page
                 path = kodiutils.url_for('play_from_page', page=quote(item.path, safe=''))

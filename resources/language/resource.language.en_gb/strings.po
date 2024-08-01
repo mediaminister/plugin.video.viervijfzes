@@ -60,6 +60,10 @@ msgstr ""
 
 
 ### SUBMENUS
+msgctxt "#30052"
+msgid "Watch live [B]{channel}[/B]"
+msgstr ""
+
 msgctxt "#30053"
 msgid "TV Guide for [B]{channel}[/B]"
 msgstr ""
@@ -100,14 +104,6 @@ msgstr ""
 
 
 ### CODE
-msgctxt "#30204"
-msgid "All seasons"
-msgstr ""
-
-msgctxt "#30205"
-msgid "Season {season}"
-msgstr ""
-
 msgctxt "#30206"
 msgid "Watch [B]{label}[/B] on YouTube"
 msgstr ""

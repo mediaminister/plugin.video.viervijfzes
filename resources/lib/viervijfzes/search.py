@@ -49,13 +49,13 @@ class SearchApi:
         results = []
         for hit in data['hits']['hits']:
             if hit['_source']['bundle'] == 'program':
-                path = hit['_source']['url'].split('/')[-1]
-                program = self._api.get_program(path, cache=CACHE_ONLY)
+                uuid = hit['_source']['uuid']
+                program = self._api.get_program_by_uuid(uuid, cache=CACHE_ONLY)
                 if program:
                     results.append(program)
                 else:
                     results.append(Program(
-                        path=path,
+                        uuid=uuid,
                         title=hit['_source']['title'],
                         description=hit['_source']['intro'],
                         poster=hit['_source']['img'],

@@ -67,11 +67,11 @@ def show_catalog():
     Catalog().show_catalog()
 
 
-@routing.route('/catalog/<program>')
-def show_catalog_program(program):
+@routing.route('/catalog/<uuid>')
+def show_catalog_program(uuid):
     """ Show a program from the catalog """
     from resources.lib.modules.catalog import Catalog
-    Catalog().show_program(program)
+    Catalog().show_program(uuid)
 
 
 @routing.route('/catalog/<program>/clips')
@@ -81,11 +81,11 @@ def show_catalog_program_clips(program):
     Catalog().show_program_clips(program)
 
 
-@routing.route('/catalog/<program>/season/<season>')
-def show_catalog_program_season(program, season):
+@routing.route('/catalog/season/<season>')
+def show_catalog_program_season(season):
     """ Show a season from a program """
     from resources.lib.modules.catalog import Catalog
-    Catalog().show_program_season(program, season)
+    Catalog().show_season(season)
 
 
 @routing.route('/category')
@@ -160,14 +160,11 @@ def play_epg(channel, timestamp):
 
 
 @routing.route('/play/catalog')
-@routing.route('/play/catalog/<uuid>')
-@routing.route('/play/catalog/<uuid>/<islongform>')
-def play_catalog(uuid=None, islongform=False):
+@routing.route('/play/catalog/<uuid>/<content_type>')
+def play_catalog(uuid=None, content_type=None):
     """ Play the requested item """
-    from ast import literal_eval
     from resources.lib.modules.player import Player
-    # Convert string to bool using literal_eval
-    Player().play(uuid, literal_eval(islongform))
+    Player().play(uuid, content_type)
 
 
 @routing.route('/play/page/<page>')
