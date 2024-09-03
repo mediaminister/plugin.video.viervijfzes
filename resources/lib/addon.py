@@ -9,11 +9,6 @@ from routing import Plugin
 
 from resources.lib import kodilogging
 
-try:  # Python 3
-    from urllib.parse import unquote
-except ImportError:  # Python 2
-    from urllib import unquote
-
 routing = Plugin()  # pylint: disable=invalid-name
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,13 +67,6 @@ def show_catalog_program(uuid):
     """ Show a program from the catalog """
     from resources.lib.modules.catalog import Catalog
     Catalog().show_program(uuid)
-
-
-@routing.route('/catalog/<program>/clips')
-def show_catalog_program_clips(program):
-    """ Show the clips from a program """
-    from resources.lib.modules.catalog import Catalog
-    Catalog().show_program_clips(program)
 
 
 @routing.route('/catalog/season/<season>')
@@ -165,13 +153,6 @@ def play_catalog(uuid=None, content_type=None):
     """ Play the requested item """
     from resources.lib.modules.player import Player
     Player().play(uuid, content_type)
-
-
-@routing.route('/play/page/<page>')
-def play_from_page(page):
-    """ Play the requested item """
-    from resources.lib.modules.player import Player
-    Player().play_from_page(unquote(page))
 
 
 @routing.route('/iptv/channels')

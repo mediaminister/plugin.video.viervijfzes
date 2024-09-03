@@ -33,13 +33,6 @@ class Channels:
         listing = []
 
         for channel in items:
-            '''
-            channel = CHANNELS[key]
-
-            # Lookup the high resolution logo based on the channel name
-            icon = '{path}/resources/logos/{logo}'.format(path=kodiutils.addon_path(), logo=channel.get('logo'))
-            fanart = '{path}/resources/logos/{logo}'.format(path=kodiutils.addon_path(), logo=channel.get('background'))
-            '''
             context_menu = [
                 (
                     kodiutils.localize(30053, channel=channel.title),  # TV Guide for {channel}
@@ -82,11 +75,7 @@ class Channels:
             raise
 
         channel = next(channel for channel in items if channel.uuid == uuid)
-        '''
-        # Lookup the high resolution logo based on the channel name
-        fanart = '{path}/resources/logos/{logo}'.format(path=kodiutils.addon_path(), logo=channel_info.get('background'))
-        icon = '{path}/resources/logos/{logo}'.format(path=kodiutils.addon_path(), logo=channel_info.get('logo'))
-        '''
+
         listing = []
 
         listing.append(

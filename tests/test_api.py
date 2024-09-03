@@ -11,7 +11,7 @@ import unittest
 import resources.lib.kodiutils as kodiutils
 from resources.lib.viervijfzes import ResolvedStream
 from resources.lib.viervijfzes.auth import AuthApi
-from resources.lib.viervijfzes.content import ContentApi, Program, Episode, CACHE_PREVENT, Category
+from resources.lib.viervijfzes.content import ContentApi, Program, CACHE_PREVENT, Category
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,35 +47,22 @@ class TestApi(unittest.TestCase):
         self.assertIsInstance(programs[0], Program)
 
     def test_episodes(self):
-        for program in ['gentwest', 'zo-man-zo-vrouw']:
+        for program in ['20cdf366-f7ac-4bf8-995a-2af53c89655d', '2e0768da-29b0-4945-821b-f76395f26876']: # Nonkels, Kiekenkotkwis
             program = self._api.get_program(program, cache=CACHE_PREVENT)
             self.assertIsInstance(program, Program)
             self.assertIsInstance(program.seasons, dict)
-            self.assertIsInstance(program.episodes, list)
-            self.assertIsInstance(program.episodes[0], Episode)
-
-    def test_clips(self):
-        for program in ['de-tafel-van-vier']:
-            program = self._api.get_program(program, extract_clips=True, cache=CACHE_PREVENT)
-
-            self.assertIsInstance(program.clips, list)
-            self.assertIsInstance(program.clips[0], Episode)
-
-            episode = self._api.get_episode(program.clips[0].path, cache=CACHE_PREVENT)
-            self.assertIsInstance(episode, Episode)
 
     @unittest.skipUnless(kodiutils.get_setting('username') and kodiutils.get_setting('password'), 'Skipping since we have no credentials.')
     def test_get_stream(self):
-        program = self._api.get_program('gentwest')
+        program = self._api.get_program('20cdf366-f7ac-4bf8-995a-2af53c89655d') # Nonkels
         self.assertIsInstance(program, Program)
-
-        episode = program.episodes[0]
-        resolved_stream = self._api.get_stream_by_uuid(episode.uuid, episode.islongform)
+        episode = self._api.get_episodes(program.seasons[0].uuid)[0]
+        resolved_stream = self._api.get_stream(episode.uuid, episode.content_type)
         self.assertIsInstance(resolved_stream, ResolvedStream)
 
     @unittest.skipUnless(kodiutils.get_setting('username') and kodiutils.get_setting('password'), 'Skipping since we have no credentials.')
     def test_get_drm_stream(self):
-        resolved_stream = self._api.get_stream_by_uuid('cc77be47-0256-4254-acbf-28a03fcac423', True)  # https://www.goplay.be/video/ncis-los-angeles/ncis-los-angeles-s14/ncis-los-angeles-s14-aflevering-1
+        resolved_stream = self._api.get_stream('cc77be47-0256-4254-acbf-28a03fcac423', True)  # https://www.goplay.be/video/ncis-los-angeles/ncis-los-angeles-s14/ncis-los-angeles-s14-aflevering-1
         self.assertIsInstance(resolved_stream, ResolvedStream)
 
 

@@ -54,12 +54,12 @@ class Catalog:
         # Used for A-Z listing or when movies and episodes are mixed.
         kodiutils.show_listing(listing, 30003, content='tvshows', sort='title')
 
-    def show_program(self, program_uuid):
+    def show_program(self, uuid):
         """ Show a program from the catalog
         :type program_id: str
          """
         try:
-            program = self._api.get_program_by_uuid(program_uuid, cache=CACHE_PREVENT)  # Use CACHE_PREVENT since we want fresh data
+            program = self._api.get_program(uuid, cache=CACHE_PREVENT)  # Use CACHE_PREVENT since we want fresh data
         except UnavailableException:
             kodiutils.ok_dialog(message=kodiutils.localize(30717))  # This program is not available in the catalogue.
             kodiutils.end_of_directory()
@@ -70,8 +70,8 @@ class Catalog:
             kodiutils.end_of_directory()
             return
 
-        # Go directly to the season when we have only one season and no clips
-        if not program.clips and len(program.seasons) == 1:
+        # Go directly to the season when we have only one season
+        if len(program.seasons) == 1:
             self.show_season(list(program.seasons.values())[0].uuid)
             return
 
@@ -82,7 +82,7 @@ class Catalog:
             listing.append(
                 TitleItem(
                     title=season.title,
-                    path=kodiutils.url_for('show_catalog_program_season', program=program_uuid, season=season.uuid),
+                    path=kodiutils.url_for('show_catalog_program_season', program=uuid, season=season.uuid),
                     art_dict={
                         'fanart': program.fanart,
                         'poster': program.poster,
@@ -92,26 +92,6 @@ class Catalog:
                         'tvshowtitle': program.title,
                         'title': season.title,
                         'plot': season.description or program.description,
-                        'set': program.title,
-                    }
-                )
-            )
-
-        # Add Clips
-        if program.clips:
-            listing.append(
-                TitleItem(
-                    title=kodiutils.localize(30059, program=program.title),  # Clips for {program}
-                    path=kodiutils.url_for('show_catalog_program_clips', program=program_uuid),
-                    art_dict={
-                        'fanart': program.fanart,
-                        'poster': program.poster,
-                        'landscape': program.thumb,
-                    },
-                    info_dict={
-                        'tvshowtitle': program.title,
-                        'title': kodiutils.localize(30059, program=program.title),  # Clips for {program}
-                        'plot': kodiutils.localize(30060, program=program.title),  # Watch short clips of {program}
                         'set': program.title,
                     }
                 )
@@ -135,23 +115,6 @@ class Catalog:
 
         # Sort by episode number by default. Takes seasons into account.
         kodiutils.show_listing(listing, 30003, content='episodes', sort=['episode', 'duration'])
-
-    def show_program_clips(self, program_id):
-        """ Show the clips of a program from the catalog
-        :type program_id: str
-        """
-        try:
-            # We need to query the backend, since we don't cache clips.
-            program = self._api.get_program(program_id, extract_clips=True, cache=CACHE_PREVENT)
-        except UnavailableException:
-            kodiutils.ok_dialog(message=kodiutils.localize(30717))  # This program is not available in the catalogue.
-            kodiutils.end_of_directory()
-            return
-
-        listing = [Menu.generate_titleitem(episode) for episode in program.clips]
-
-        # Sort like we get our results back.
-        kodiutils.show_listing(listing, 30003, content='episodes')
 
     def show_categories(self):
         """ Shows the categories """

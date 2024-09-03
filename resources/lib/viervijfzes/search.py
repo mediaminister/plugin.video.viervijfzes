@@ -50,7 +50,7 @@ class SearchApi:
         for hit in data['hits']['hits']:
             if hit['_source']['bundle'] == 'program':
                 uuid = hit['_source']['uuid']
-                program = self._api.get_program_by_uuid(uuid, cache=CACHE_ONLY)
+                program = self._api.get_program(uuid, cache=CACHE_ONLY)
                 if program:
                     results.append(program)
                 else:

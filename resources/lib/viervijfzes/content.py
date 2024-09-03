@@ -48,8 +48,7 @@ class Program:
     """ Defines a Program. """
 
     def __init__(self, uuid=None, path=None, channel=None, category_id=None, category_name=None, title=None, description=None, aired=None, expiry=None, poster=None, thumb=None, fanart=None, seasons=None,
-                 episodes=None,
-                 clips=None, my_list=False):
+                 my_list=False):
         """
         :type uuid: str
         :type path: str
@@ -64,8 +63,6 @@ class Program:
         :type thumb: str
         :type fanart: str
         :type seasons: list[Season]
-        :type episodes: list[Episode]
-        :type clips: list[Episode]
         :type my_list: bool
         """
         self.uuid = uuid
@@ -81,8 +78,6 @@ class Program:
         self.thumb = thumb
         self.fanart = fanart
         self.seasons = seasons
-        self.episodes = episodes
-        self.clips = clips
         self.my_list = my_list
 
     def __repr__(self):
@@ -273,88 +268,7 @@ class ContentApi:
             value = category
         return [program for program in programs if getattr(program, key) == value]
 
-    def get_programs_old(self, channel=None, cache=CACHE_AUTO):
-        """ Get a list of all programs of the specified channel.
-        :type channel: str
-        :type cache: str
-        :rtype list[Program]
-        """
-
-        def update():
-            """ Fetch the program listing by scraping """
-            # Load webpage
-            raw_html = self._get_url(self.SITE_URL + '/programmas')
-
-            # Parse programs
-            regex_programs = re.compile(r'data-program="(?P<json>[^"]+)"', re.DOTALL)
-
-            data = [
-                json.loads(unescape(item.group('json')))
-                for item in regex_programs.finditer(raw_html)
-            ]
-
-            if not data:
-                raise Exception('No programs found')
-
-            return data
-
-        # Fetch listing from cache or update if needed
-        data = self._handle_cache(key=['programs'], cache_mode=cache, update=update, ttl=30 * 60)  # 30 minutes
-        if not data:
-            return []
-
-        if channel:
-            programs = [
-                self._parse_program_data(record) for record in data if record['pageInfo']['brand'] == channel
-            ]
-        else:
-            programs = [
-                self._parse_program_data(record) for record in data
-            ]
-
-        return programs
-
-    def get_program(self, path, extract_clips=False, cache=CACHE_AUTO):
-        """ Get a Program object from the specified page.
-        :type path: str
-        :type extract_clips: bool
-        :type cache: int
-        :rtype Program
-        """
-        # We want to use the html to extract clips
-        # This is the worst hack, since Python 2.7 doesn't support nonlocal
-        raw_html = [None]
-
-        def update():
-            """ Fetch the program metadata by scraping """
-            # Fetch webpage
-            page = self._get_url(self.SITE_URL + '/' + path)
-
-            # Store a copy in the parent's raw_html var.
-            raw_html[0] = page
-
-            # Extract JSON
-            regex_program = re.compile(r'data-hero="([^"]+)', re.DOTALL)
-            json_data = unescape(regex_program.search(page).group(1))
-            data = json.loads(json_data)['data']
-
-            return data
-
-        # Fetch listing from cache or update if needed
-        data = self._handle_cache(key=['program', path], cache_mode=cache, update=update)
-        if not data:
-            return None
-
-        program = self._parse_program_data(data)
-
-        # Also extract clips if we did a real HTTP call
-        if extract_clips and raw_html[0]:
-            clips = self._extract_videos(raw_html[0])
-            program.clips = clips
-
-        return program
-
-    def get_program_by_uuid(self, uuid, cache=CACHE_AUTO):
+    def get_program(self, uuid, cache=CACHE_AUTO):
         """ Get a Program object with the specified uuid.
         :type uuid: str
         :type cache: str
@@ -425,68 +339,7 @@ class ContentApi:
 
         return episodes
 
-    def get_episode(self, path, cache=CACHE_AUTO):
-        """ Get a Episode object from the specified page.
-        :type path: str
-        :type cache: str
-        :rtype Episode
-        """
-
-        def update():
-            """ Fetch the program metadata by scraping """
-            # Load webpage
-            page = self._get_url(self.SITE_URL + '/' + path)
-
-            program_json = None
-            episode_json = None
-
-            # Extract video JSON by looking for a data-video tag
-            # This is not present on every page
-            regex_video_data = re.compile(r'data-video="([^"]+)"', re.DOTALL)
-            result = regex_video_data.search(page)
-            if result:
-                video_id = json.loads(unescape(result.group(1)))['id']
-                video_json_data = self._get_url('%s/web/v1/videos/short-form/%s' % (self.API_GOPLAY, video_id))
-                video_json = json.loads(video_json_data)
-                return {'video': video_json}
-
-            # Extract program JSON
-            regex_program = re.compile(r'data-hero="([^"]+)', re.DOTALL)
-            result = regex_program.search(page)
-            if result:
-                program_json_data = unescape(result.group(1))
-                program_json = json.loads(program_json_data)['data']
-
-            # Extract episode JSON
-            regex_episode = re.compile(r'<script type="application/json" data-drupal-selector="drupal-settings-json">(.*?)</script>', re.DOTALL)
-            result = regex_episode.search(page)
-            if result:
-                episode_json_data = unescape(result.group(1))
-                episode_json = json.loads(episode_json_data)
-
-            return {'program': program_json, 'episode': episode_json}
-
-        # Fetch listing from cache or update if needed
-        data = self._handle_cache(key=['episode', path], cache_mode=cache, update=update)
-        if not data:
-            return None
-
-        if 'video' in data and data['video']:
-            # We have found detailed episode information
-            episode = self._parse_clip_data(data['video'])
-            return episode
-
-        if 'program' in data and 'episode' in data and data['program'] and data['episode']:
-            # We don't have detailed episode information
-            # We need to lookup the episode in the program JSON
-            program = self._parse_program_data(data['program'])
-            for episode in program.episodes:
-                if episode.nodeid == data['episode']['pageInfo']['nodeId']:
-                    return episode
-
-        return None
-
-    def get_stream_by_uuid(self, uuid, content_type):
+    def get_stream(self, uuid, content_type):
         """ Return a ResolvedStream for this video.
         :type uuid: string
         :type content_type: string
@@ -690,7 +543,7 @@ class ContentApi:
         items = []
         for item in result:
             try:
-                program = self.get_program_by_uuid(item)
+                program = self.get_program(item)
                 if program:
                     program.my_list = True
                     items.append(program)
@@ -743,85 +596,6 @@ class ContentApi:
         return programs
 
     @staticmethod
-    def _extract_videos(html):
-        """ Extract videos from HTML code
-        :type html: str
-        :rtype list[Episode]
-        """
-        # Item regexes
-        regex_item = re.compile(r'<a[^>]+?href="(?P<path>[^"]+)"[^>]+?>.*?</a>', re.DOTALL)
-
-        regex_episode_program = re.compile(r'<h3 class="episode-teaser__subtitle">([^<]*)</h3>')
-        regex_episode_title = re.compile(r'<(?:div|h3) class="(?:poster|card|image|episode)-teaser__title">(?:<span>)?([^<]*)(?:</span>)?</(?:div|h3)>')
-        regex_episode_duration = re.compile(r'data-duration="([^"]*)"')
-        regex_episode_video_id = re.compile(r'data-video-id="([^"]*)"')
-        regex_episode_image = re.compile(r'data-background-image="([^"]*)"')
-        regex_episode_badge = re.compile(r'<div class="(?:poster|card|image|episode)-teaser__badge badge">([^<]*)</div>')
-
-        # Extract items
-        episodes = []
-        for item in regex_item.finditer(html):
-            item_html = item.group(0)
-            path = item.group('path')
-
-            # Extract title
-            try:
-                title = unescape(regex_episode_title.search(item_html).group(1))
-            except AttributeError:
-                continue
-
-            # This is not a video
-            if not path.startswith('/video'):
-                continue
-
-            try:
-                episode_program = regex_episode_program.search(item_html).group(1)
-            except AttributeError:
-                _LOGGER.warning('Found no episode_program for %s', title)
-                episode_program = None
-
-            try:
-                episode_duration = int(regex_episode_duration.search(item_html).group(1))
-            except AttributeError:
-                _LOGGER.warning('Found no episode_duration for %s', title)
-                episode_duration = None
-
-            try:
-                episode_video_id = regex_episode_video_id.search(item_html).group(1)
-            except AttributeError:
-                _LOGGER.warning('Found no episode_video_id for %s', title)
-                episode_video_id = None
-
-            try:
-                episode_image = unescape(regex_episode_image.search(item_html).group(1))
-            except AttributeError:
-                _LOGGER.warning('Found no episode_image for %s', title)
-                episode_image = None
-
-            try:
-                episode_badge = unescape(regex_episode_badge.search(item_html).group(1))
-            except AttributeError:
-                episode_badge = None
-
-            description = title
-            if episode_badge:
-                description += "\n\n[B]%s[/B]" % episode_badge
-
-            # Episode
-            episodes.append(Episode(
-                path=path.lstrip('/'),
-                channel='',  # TODO
-                title=title,
-                description=html_to_kodi(description),
-                duration=episode_duration,
-                uuid=episode_video_id,
-                thumb=episode_image,
-                program_title=episode_program,
-            ))
-
-        return episodes
-
-    @staticmethod
     def _parse_program_data(data):
         """ Parse the Program JSON.
         :type data: dict
@@ -851,14 +625,6 @@ class ContentApi:
             )
             for key, playlist in enumerate(data.get('playlists', [])) if playlist.get('title')
         }
-        '''
-        # Create Episodes info
-        program.episodes = [
-            ContentApi._parse_episode_data(episode, playlist.get('playlistUuid'))
-            for playlist in data.get('playlists', [])
-            for episode in playlist.get('episodes')
-        ]
-        '''
 
         return program
 
