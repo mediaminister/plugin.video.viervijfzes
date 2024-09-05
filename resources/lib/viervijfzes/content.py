@@ -468,7 +468,10 @@ class ContentApi:
         swimlanes = []
         for item in data.get('lanes'):
             swimlanes.append(
-                Swimlane(index=item.get('index'), title=item.get('title'), lane_type=item.get('laneType'))
+                Swimlane(index=item.get('index'),
+                         title=item.get('title'),
+                         lane_type=item.get('laneType')
+                )
             )
         return swimlanes
 
@@ -499,36 +502,38 @@ class ContentApi:
             return None
 
 
-        videos = []
-        programs = []
-        for card in data:
-            if card.get('type') == 'PROGRAM':
-                # Program
-                programs.append(Program(
-                    uuid=card.get('uuid'),
-                    title=card.get('title'),
-                    category_id=str(card.get('categoryId')),
-                    category_name=card.get('category') or 'No category',
-                    poster=card.get('images')[0].get('url'),
-                    channel=card.get('brand'),
-                ))
-            elif card.get('type') == 'VIDEO':
-                # Video
-                videos.append(Episode(
-                    uuid=card.get('uuid'),
-                    title=card.get('subtitle'),
-                    channel=card.get('brand'),
-                    description=html_to_kodi(card.get('description')),
-                    duration=card.get('duration'),
-                    thumb=card.get('images')[0].get('url'),
-                    program_title=card.get('title'),
-                    aired=datetime.fromtimestamp(card.get('dates', {}).get('publishDate', 0.0) or 0.0),
-                    expiry=datetime.fromtimestamp(card.get('dates', {}).get('unpublishDate', 0.0) or 0.0),
-                    content_type='long_form',
-                ))
+        videos, programs = self._parse_cards_data(data)
 
         return videos, programs
 
+    def search(self, query, limit=100, offset=0, cache=CACHE_AUTO):
+        """ Search by query """
+        def update():
+            """ Fetch the search metadata """
+            offset = 0
+            payload = {
+                'limit': limit,
+                'offset': offset,
+                'query': query,
+            }
+            cards = []
+            got_everything = False
+            while not got_everything:
+                data = self._post_url(self.API_GOPLAY + '/tv/v1/search', data=payload, authentication='Bearer %s' % self._auth.get_token())
+                result = json.loads(data)
+                cards.extend(result.get('cards'))
+                total = result.get('total')
+                if offset < (total - limit):
+                    offset += limit
+                else:
+                    got_everything = True
+            return cards
+
+        # Fetch listing from cache or update if needed
+        data = self._handle_cache(key=['search', query, limit, offset], cache_mode=cache, update=update)
+
+        videos, programs = self._parse_cards_data(data)
+        return videos, programs
 
     def get_mylist(self):
         """ Get the content of My List
@@ -627,6 +632,42 @@ class ContentApi:
         }
 
         return program
+
+
+    @staticmethod
+    def _parse_cards_data(data):
+        """ Parse the Cards JSON.
+        :type data: dict
+        ::rtype list[Episode], list[Program]
+        """
+        videos = []
+        programs = []
+        for card in data:
+            if card.get('type') == 'PROGRAM':
+                # Program
+                programs.append(Program(
+                    uuid=card.get('uuid'),
+                    title=card.get('title'),
+                    category_id=str(card.get('categoryId')),
+                    category_name=card.get('category') or 'No category',
+                    poster=card.get('images')[0].get('url'),
+                    channel=card.get('brand'),
+                ))
+            elif card.get('type') == 'VIDEO':
+                # Video
+                videos.append(Episode(
+                    uuid=card.get('uuid'),
+                    title=card.get('subtitle'),
+                    channel=card.get('brand'),
+                    description=html_to_kodi(card.get('description')),
+                    duration=card.get('duration'),
+                    thumb=card.get('images')[0].get('url'),
+                    program_title=card.get('title'),
+                    aired=datetime.fromtimestamp(card.get('dates', {}).get('publishDate', 0.0) or 0.0),
+                    expiry=datetime.fromtimestamp(card.get('dates', {}).get('unpublishDate', 0.0) or 0.0),
+                    content_type='long_form',
+                ))
+        return videos, programs
 
 
     @staticmethod
