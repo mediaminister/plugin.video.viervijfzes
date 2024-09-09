@@ -112,7 +112,7 @@ class Episode:
     """ Defines an Episode. """
 
     def __init__(self, uuid=None, nodeid=None, path=None, channel=None, program_title=None, title=None, description=None, thumb=None, duration=None,
-                 season=None, season_uuid=None, number=None, rating=None, aired=None, expiry=None, stream=None, content_type=None):
+                 position=None, season=None, season_uuid=None, number=None, rating=None, aired=None, expiry=None, stream=None, content_type=None):
         """
         :type uuid: str
         :type nodeid: str
@@ -123,6 +123,7 @@ class Episode:
         :type description: str
         :type thumb: str
         :type duration: int
+        :type position: int
         :type season: int
         :type season_uuid: str
         :type number: int
@@ -141,6 +142,7 @@ class Episode:
         self.description = description
         self.thumb = thumb
         self.duration = duration
+        self.position = position
         self.season = season
         self.season_uuid = season_uuid
         self.number = number
@@ -475,7 +477,7 @@ class ContentApi:
             )
         return swimlanes
 
-    def get_swimlane(self, page, index, limit=100, offset=0, cache=CACHE_AUTO):
+    def get_swimlane(self, page, index, limit=100, offset=0, cache=CACHE_PREVENT):
         """ Get a list of all categories.
         :rtype list[Episode], list[Program]
         """
@@ -498,9 +500,6 @@ class ContentApi:
 
         # Fetch listing from cache or update if needed
         data = self._handle_cache(key=['swimlane', page, index, limit, offset], cache_mode=cache, update=update)
-        if not data:
-            return None
-
 
         videos, programs = self._parse_cards_data(data)
 
@@ -570,6 +569,21 @@ class ContentApi:
         self._put_url(
             self.API_GOPLAY + '/tv/v1/programs/%s/myList' % program_id,
             data={'onMyList': False},
+            authentication='Bearer %s' % self._auth.get_token()
+        )
+
+    def update_position(self, video_id, position):
+        """ Update resume position of a video """
+        self._put_url(
+            self.API_GOPLAY + '/tv/v1/videos/%s/position' % video_id,
+            data={'position': position},
+            authentication='Bearer %s' % self._auth.get_token()
+        )
+
+    def delete_position(self, video_id):
+        """ Update resume position of a video """
+        self._delete_url(
+            self.API_GOPLAY + '/web/v1/videos/continue-watching/%s' % video_id,
             authentication='Bearer %s' % self._auth.get_token()
         )
 
@@ -661,6 +675,7 @@ class ContentApi:
                     channel=card.get('brand'),
                     description=html_to_kodi(card.get('description')),
                     duration=card.get('duration'),
+                    position=card.get('position'),
                     thumb=card.get('images')[0].get('url'),
                     program_title=card.get('title'),
                     aired=datetime.fromtimestamp(card.get('dates', {}).get('publishDate', 0.0) or 0.0),
@@ -865,7 +880,7 @@ class ContentApi:
         else:
             response = self._session.delete(url, params=params, proxies=PROXIES)
 
-        if response.status_code != 200:
+        if response.status_code not in (200, 202):
             _LOGGER.error(response.text)
             raise Exception('Could not fetch data')
 

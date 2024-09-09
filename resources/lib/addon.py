@@ -125,6 +125,13 @@ def mylist_del(uuid):
     Catalog().mylist_del(uuid)
 
 
+@routing.route('/continue')
+def continue_watching():
+    """ Show continue watching list """
+    from resources.lib.modules.catalog import Catalog
+    Catalog().continue_watching()
+
+
 @routing.route('/search')
 @routing.route('/search/<query>')
 def show_search(query=None):

@@ -65,6 +65,19 @@ class TestApi(unittest.TestCase):
         resolved_stream = self._api.get_stream('cc77be47-0256-4254-acbf-28a03fcac423', True)  # https://www.goplay.be/video/ncis-los-angeles/ncis-los-angeles-s14/ncis-los-angeles-s14-aflevering-1
         self.assertIsInstance(resolved_stream, ResolvedStream)
 
+    def test_search(self):
+        programs = self._api.search('de mol')
+        self.assertIsInstance(programs, list)
+        self.assertIsInstance(programs[0], Program)
+
+    def test_search_empty(self):
+        programs = self._api.search('')
+        self.assertIsInstance(programs, list)
+
+    def test_search_space(self):
+        programs = self._api.search(' ')
+        self.assertIsInstance(programs, list)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -84,6 +84,17 @@ class Menu:
                 }
             ),
             TitleItem(
+                title=kodiutils.localize(30014),  # Continue Watching
+                path=kodiutils.url_for('continue_watching'),
+                art_dict={
+                    'icon': 'DefaultInProgressShows.png',
+                    'fanart': kodiutils.get_addon_info('fanart')
+                },
+                info_dict={
+                    'plot': kodiutils.localize(30014)
+                }
+            ),
+            TitleItem(
                 title=kodiutils.localize(30009),  # Search
                 path=kodiutils.url_for('show_search'),
                 art_dict={

@@ -198,3 +198,22 @@ class Catalog:
         self._api.mylist_del(uuid)
 
         kodiutils.end_of_directory()
+
+    def continue_watching(self, index=0):
+        """ Show the continue watching List """
+        videos, _ = self._api.get_swimlane('continue-watching', index, cache=CACHE_PREVENT)  # Use CACHE_PREVENT since we want fresh data
+
+        listing = []
+        for video in videos:
+            title_item = Menu.generate_titleitem(video)
+            if video.program_title:
+                title_item.info_dict['title'] = video.program_title + ' - ' + title_item.title
+            # Set resume position
+            if video.position:
+                title_item.prop_dict['resumetime'] = video.position
+                title_item.prop_dict['totaltime'] = video.duration
+            listing.append(title_item)
+
+        # Sort items by title
+        # Used for A-Z listing or when movies and episodes are mixed.
+        kodiutils.show_listing(listing, 30011, content='tvshows', sort='title')
